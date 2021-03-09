@@ -1,6 +1,7 @@
 # Author: Xuechao Zhang
 # Date: March 2nd, 2021
 # Description: USB 免驱摄像头图像采集
+#               AprilTag 使用个人开发者复现版本
 
 import sys
 import os
@@ -10,12 +11,19 @@ import numpy as np
 from AprilTag import Apriltag
 
 def undistort(frame):
+    # 1280*800 112122-112340
+    fx = 827.678512401081
+    cx = 649.519595992254
+    fy = 827.856142111345
+    cy = 479.829876653072
+    k1, k2, p1, p2, k3 = -0.335814019871572, 0.101431758719313, 0.0, 0.0, 0.0
+
     # 640*400 202050-202136
-    fx = 411.869480403473
-    cx = 316.221792967186
-    fy = 411.811639873307
-    cy = 239.229856557444
-    k1, k2, p1, p2, k3 = -0.354841715091639, 0.131675385816656, 8.48988830394474e-05, 0.000396990585927779, 0.0
+    # fx = 411.869480403473
+    # cx = 316.221792967186
+    # fy = 411.811639873307
+    # cy = 239.229856557444
+    # k1, k2, p1, p2, k3 = -0.354841715091639, 0.131675385816656, 8.48988830394474e-05, 0.000396990585927779, 0.0
     
     # 默认分辨率 194058-194442
     # fx = 410.891485351593
@@ -47,11 +55,13 @@ ap.create_detector(debug=False)
 index = 1  # 保存图片起始索引
 
 if flag:
+    timestamp = [time.time()] * 10
+
     # 只有这个分辨率支持 240 fps
     print("init...")
-    print(cap.set(6, cv2.VideoWriter.fourcc('M', 'J', 'P', 'G')))
-    print(cap.set(3, 640))
-    print(cap.set(4, 400))
+    # print(cap.set(6, cv2.VideoWriter.fourcc('M', 'J', 'P', 'G')))
+    # print(cap.set(3, 640))
+    # print(cap.set(4, 400))
 
     frames_width = cap.get(3)
     print("width: "+str(frames_width))
@@ -61,8 +71,6 @@ if flag:
     print("FPS: " + str(fps))
 
 while (flag):
-    starttime = time.time()
-
     ret, frame = cap.read()
     frame_undistort = undistort(frame)
     cv2.imshow("Capture_raw", frame)
@@ -89,8 +97,9 @@ while (flag):
     elif k == ord('q')or k == ord('Q'):  # 按下q键，程序退出
         break
 
-    endtime = time.time()
-    fps = round(1 / (endtime - starttime), 2)  # 保留两位
+
+    timestamp = timestamp[1:10]+[time.time()]
+    fps = round(9 / (timestamp[9] - timestamp[0]), 2)  # 保留两位
 
 cap.release() # 释放摄像头
 cv2.destroyAllWindows() # 释放并销毁窗口
