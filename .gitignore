@@ -1,9 +1,9 @@
-/.vscode/
+.vscode/
 /Paper/
 /开题/
 /流程管理/
 /系统模板/
-.STL
-.jpg
-.png
-.pyc
+*.STL
+*.jpg
+*.png
+*.pyc
