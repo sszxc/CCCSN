@@ -103,3 +103,6 @@ while (flag):
 
 cap.release() # 释放摄像头
 cv2.destroyAllWindows() # 释放并销毁窗口
+
+
+
