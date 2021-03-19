@@ -1,14 +1,16 @@
 # Author: Xuechao Zhang
 # Date: March 10th, 2021
 # Description: 相机 + 云台
-#               利用舵机角度对相机图像透视变换
+#               根据舵机角度对相机图像透视变换
 
 from Servo import *
 from Camera import *
 import math
 
+
 def rad(x):
     return x * np.pi / 180
+
 
 def Perspective_Transformation(img, anglex, angley, anglez):
     w, h = img.shape[0:2]
@@ -20,19 +22,19 @@ def Perspective_Transformation(img, anglex, angley, anglez):
     z = np.sqrt(w ** 2 + h ** 2) / 2 / np.tan(rad(fov / 2))
     # 齐次变换矩阵
     rx = np.array([[1, 0, 0, 0],
-                    [0, np.cos(rad(anglex)), -np.sin(rad(anglex)), 0],
-                    [0, -np.sin(rad(anglex)), np.cos(rad(anglex)), 0, ],
-                    [0, 0, 0, 1]], np.float32)
+                   [0, np.cos(rad(anglex)), -np.sin(rad(anglex)), 0],
+                   [0, -np.sin(rad(anglex)), np.cos(rad(anglex)), 0, ],
+                   [0, 0, 0, 1]], np.float32)
 
     ry = np.array([[np.cos(rad(angley)), 0, np.sin(rad(angley)), 0],
-                    [0, 1, 0, 0],
-                    [-np.sin(rad(angley)), 0, np.cos(rad(angley)), 0, ],
-                    [0, 0, 0, 1]], np.float32)
+                   [0, 1, 0, 0],
+                   [-np.sin(rad(angley)), 0, np.cos(rad(angley)), 0, ],
+                   [0, 0, 0, 1]], np.float32)
 
     rz = np.array([[np.cos(rad(anglez)), np.sin(rad(anglez)), 0, 0],
-                    [-np.sin(rad(anglez)), np.cos(rad(anglez)), 0, 0],
-                    [0, 0, 1, 0],
-                    [0, 0, 0, 1]], np.float32)
+                   [-np.sin(rad(anglez)), np.cos(rad(anglez)), 0, 0],
+                   [0, 0, 1, 0],
+                   [0, 0, 0, 1]], np.float32)
 
     r = rx.dot(ry).dot(rz)
 
@@ -69,6 +71,7 @@ def Perspective_Transformation(img, anglex, angley, anglez):
 
     return result
 
+
 if __name__ == "__main__":
     init_port()
     init_servo(1)
@@ -76,22 +79,24 @@ if __name__ == "__main__":
     # target_angle = [0]*12 # 12个舵机位置
     target_angle = [512, 510]
     set_angle(target_angle)
-    
+
     flag, cap = init_camera(0)
 
     while (flag):
         ret, frame = cap.read()
         frame_undistort = undistort_fisheye(frame)
 
-        frame_undistort = cv2.resize(frame_undistort, (0, 0), fx=0.25, fy=0.25,
-                            interpolation=cv2.INTER_NEAREST)
+        frame_undistort = cv2.resize(
+            frame_undistort, (0, 0), fx=0.25, fy=0.25, interpolation=cv2.INTER_NEAREST)
 
         # 黑边
         frame_undistort = cv2.copyMakeBorder(
             frame_undistort, 200, 200, 200, 200, cv2.BORDER_CONSTANT, 0)
 
         # 平移
-        offset = -2460 * math.sin(math.radians(510-target_angle[1]*300/1024))/0.001208*0.0001
+        offset = -2460 * \
+            math.sin(math.radians(
+                510-target_angle[1]*300/1024))/0.001208*0.0001
         mat_translation = np.float32([[1, 0, 0], [0, 1, offset]])
         frame_undistort = cv2.warpAffine(
             frame_undistort, mat_translation, frame_undistort.shape[0:2])
@@ -120,7 +125,7 @@ if __name__ == "__main__":
             set_angle(target_angle)
             print([target_angle])
         elif k == ord('S'):
-            target_angle[1] += 10            
+            target_angle[1] += 10
             set_angle(target_angle)
             print([target_angle])
         elif k == ord('q') or k == ord('Q'):  # 按下q键，程序退出

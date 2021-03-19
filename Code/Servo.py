@@ -2,7 +2,7 @@
 # Date: March 8th, 2021
 # Description: 飞特 SCS009 舵机测试
 #               参考自 sync_write.py
-#               注意 input 要外部终端
+#               注意在 VSCode 中使用 input 要外部终端
 
 import os
 
