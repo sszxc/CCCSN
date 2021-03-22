@@ -1,11 +1,14 @@
 # Author: Xuechao Zhang
 # Date: March 17th, 2021
-# Description: 相机坐标与世界坐标的转换
+# Description: 实现虚拟相机模型
+#               测试不同姿态下像素坐标与世界坐标的转换
 
 import numpy as np
 import cv2
 import random
 import math
+from Xbox import *
+import copy
 
 
 class Cam:
@@ -90,7 +93,8 @@ class Cam:
 
 
 def randomColor():
-    return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+    return (0, 0, 0)
+    # return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
 
 if __name__ == "__main__":
@@ -106,7 +110,8 @@ if __name__ == "__main__":
     cam_1 = Cam()
     cam_1.init_IM(827.678512401081, 827.856142111345,
                   649.519595992254, 479.829876653072)
-    cam_1_T_para = [[0, 0, 0], 0, 0, 2500]
+    cam_1_T_para_defult = [[5, 0, 0], -3000, -1500, 2500]
+    cam_1_T_para = copy.deepcopy(cam_1_T_para_defult)
     cam_1.init_T(*cam_1_T_para)
 
     # 随机空间点
@@ -123,6 +128,9 @@ if __name__ == "__main__":
     # points[6] = np.array([[1980], [900], [2500]], dtype=float)
     # points[7] = np.array([[2400], [1800], [2500]], dtype=float)
 
+    # 初始化手柄控制
+    joystick = init()
+
     while 1:
         print(cam_1_T_para)
         cam_1.init_T(*cam_1_T_para)
@@ -131,47 +139,86 @@ if __name__ == "__main__":
         topview.init_view()
         cam_1.init_view(800, 1280)
 
-        pixels = [topview.capture(point) for point in points]
-
+        pixel_0 = []
+        pixel_1 = []
+        
         for point in points:
             color = randomColor()
-            pixel_0 = topview.capture(point)
-            cv2.circle(topview.img, pixel_0, 20, color, -1)
-            pixel_1 = cam_1.capture(point)
-            cv2.circle(cam_1.img, pixel_1, 20, color, -1)
+            pixel_0.append(topview.capture(point))
+            cv2.circle(topview.img, pixel_0[-1], 20, color, -1)
+            pixel_1.append(cam_1.capture(point))
+            cv2.circle(cam_1.img, pixel_1[-1], 20, color, -1)
+
+        # 前四个点生成变换矩阵
+        pixel_before = np.float32(pixel_0[0:4])
+        pixel_after = np.float32(pixel_1[0:4])
+        M = cv2.getPerspectiveTransform(pixel_before, pixel_after)
+        
+        # 进行透视变换
+        img_before = cv2.imread('map.jpg')
+        img_after = cv2.warpPerspective(img_before, M, (1280, 800), borderValue=(255, 255, 255))
+        
+        topview.img = img_before
+        cam_1.img = img_after
+
+        corners = []
+        corners.append(np.array([0, 0, 1],dtype=np.float32))
+        corners.append(np.array([1280, 0, 1],dtype=np.float32))
+        corners.append(np.array([0, 800, 1], dtype=np.float32))
+        corners.append(np.array([1280, 800, 1], dtype=np.float32))
+
+        M_inv = np.linalg.inv(M)
+        for corner in corners:
+            corner_projected = np.dot(M_inv, corner.T)
+            corner_projected /= corner_projected[2] # 归一化
+            cv2.circle(topview.img, tuple(corner_projected.astype(np.int).T.tolist()[0:2]), 20, (0, 255, 0), -1)
 
         cv2.imshow('topview', topview.img)
         cv2.imshow('camview_1', cam_1.img)
 
-        # WASD平移 ZX高度 UJIKOL旋转 0复位
-        k = cv2.waitKey(0) & 0xFF
-        if k == ord('A'):
-            cam_1_T_para[1] += 1000
-        elif k == ord('D'):
-            cam_1_T_para[1] -= 1000
-        elif k == ord('W'):
-            cam_1_T_para[2] += 1000
-        elif k == ord('S'):
-            cam_1_T_para[2] -= 1000
-        elif k == ord('Z'):
-            cam_1_T_para[3] += 1000
-        elif k == ord('X'):
-            cam_1_T_para[3] -= 1000
-        elif k == ord('U'):
-            cam_1_T_para[0][0] += 10
-        elif k == ord('J'):
-            cam_1_T_para[0][0] -= 10
-        elif k == ord('I'):
-            cam_1_T_para[0][1] += 10
-        elif k == ord('K'):
-            cam_1_T_para[0][1] -= 10
-        elif k == ord('O'):
-            cam_1_T_para[0][2] += 10
-        elif k == ord('L'):
-            cam_1_T_para[0][2] -= 10
-        elif k == ord('0'):
-            cam_1_T_para = [[0, 0, 0], 0, 0, 10000]
-        elif k == ord('q') or k == ord('Q'):  # 按下q键，程序退出
-            break
+        if joystick:
+            # 左摇杆水平位移 右摇杆角度 LT&RT高度
+            axis, button, hat = joystick_input(joystick)
+            cam_1_T_para[1] += axis[0] * -30
+            cam_1_T_para[2] += axis[1] * -30
+            cam_1_T_para[3] += (axis[4] - axis[5])*30
+            cam_1_T_para[0][1] = axis[2] * -50
+            cam_1_T_para[0][0] = axis[3] * 50
+            # A 退出 B 复位
+            if button[0] == 1:
+                break
+            elif button[1] == 1:
+                cam_1_T_para = copy.deepcopy(cam_1_T_para_defult)
+        else:
+            # WASD平移 ZX高度 UJIKOL旋转 0复位
+            k = cv2.waitKey(0) & 0xFF
+            if k == ord('q') or k == ord('Q'):  # 按下q键，程序退出
+                break
+            elif k == ord('A'):
+                cam_1_T_para[1] += 1000
+            elif k == ord('D'):
+                cam_1_T_para[1] -= 1000
+            elif k == ord('W'):
+                cam_1_T_para[2] += 1000
+            elif k == ord('S'):
+                cam_1_T_para[2] -= 1000
+            elif k == ord('Z'):
+                cam_1_T_para[3] += 1000
+            elif k == ord('X'):
+                cam_1_T_para[3] -= 1000
+            elif k == ord('U'):
+                cam_1_T_para[0][0] += 10
+            elif k == ord('J'):
+                cam_1_T_para[0][0] -= 10
+            elif k == ord('I'):
+                cam_1_T_para[0][1] += 10
+            elif k == ord('K'):
+                cam_1_T_para[0][1] -= 10
+            elif k == ord('O'):
+                cam_1_T_para[0][2] += 10
+            elif k == ord('L'):
+                cam_1_T_para[0][2] -= 10
+            elif k == ord('0'):
+                cam_1_T_para = cam_1_T_para_defult
 
     cv2.destroyAllWindows()  # 释放并销毁窗口

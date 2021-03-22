@@ -1,6 +1,7 @@
 # Author: Xuechao Zhang
 # Date: March 10th, 2021
 # Description: 相机 + 云台
+#               键盘控制舵机
 #               根据舵机角度对相机图像透视变换
 
 from Servo import *

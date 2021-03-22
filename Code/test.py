@@ -2,7 +2,7 @@
 import cv2
 import numpy as np
 
-img = cv2.imread("C:\\Users\\73677\\Documents\\CCCSN\\Code\\1.jpg")
+img = cv2.imread("1.jpg")
 
 rows, cols, _ = img.shape
 points1 = np.float32([[56, 65], [368, 52], [28, 387], [389, 390]])
