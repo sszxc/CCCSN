@@ -156,8 +156,10 @@ def set_angle(angle_list):
         #         SCS2_ID, angle, scs2_present_position, SCS_TOHOST(scs2_present_speed, 15)))
         # if not ((abs(angle - scs1_present_position) > SCS_MOVING_STATUS_THRESHOLD) and (abs(angle - scs2_present_position) > SCS_MOVING_STATUS_THRESHOLD)):
         #     break
+        
+        # 只跑了一遍
         break
-    return 0
+    return scs1_present_position, scs2_present_position
 
 def remove_servo(ID):
     '''

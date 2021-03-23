@@ -2,12 +2,13 @@
 # Date: March 22th, 2021
 # Description: 获取Xbox手柄的输入作为调试
 
-# 适用于 Xbox 手柄
+# 适用于 Xbox One 手柄 XPS15 电脑
+# USB over Network 到 DELL7070 电脑上无法输出
 
 import pygame
 import time
 
-def init():
+def joyinit():
     pygame.init()
     pygame.joystick.init()
     if pygame.joystick.get_count():
@@ -32,7 +33,7 @@ def joystick_input(joystick):
     return axis, button, hat
 
 if __name__ == "__main__":
-    joystick = init()
+    joystick = joyinit()
     if joystick:
         while (1):
             axis, button, hat = joystick_input(joystick)
