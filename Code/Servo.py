@@ -3,8 +3,10 @@
 # Description: 飞特 SCS009 舵机测试
 #               参考自 sync_write.py
 #               注意在 VSCode 中使用 input 要外部终端
+#               Mar.24th 加入手柄控制
 
 import os
+from Xbox import *
 
 if os.name == 'nt':
     import msvcrt
@@ -189,28 +191,35 @@ if __name__ == "__main__":
 
     target_angle = [0]*2 # 12个舵机位置
     target_angle = [512, 700]
+    real_angle = []
+
+    # 初始化手柄控制
+    joystick = joyinit()
+    # 不加下面这两句经常获取不到按键
+    size = [430, 410]
+    screen = pygame.display.set_mode(size)
 
     # 开始测试
     while 1:
-        # print("Press any key to continue! (or press ESC to quit!)")
-        # if getch() == chr(0x1b):
-        #     break
-        
-        # target_angle[0]=scs_goal_position[index]
-        # target_angle[1]=scs_goal_position[index]
+        if not joystick:
+            a,b = (input("输入舵机目标角度(0~1023)：").split())
+            # a = (input("输入舵机目标角度："))
+            target_angle[0]= int(a)
+            target_angle[1]= int(b)
+        else:
+            axis, button, hat = joystick_input(joystick)
+            target_angle[0] += int(axis[0] * 2)
+            target_angle[1] += int(axis[1] * 2)
+            if button[0] == 1:
+                break
+            elif button[1] == 1:
+                target_angle = [430, 410]
+            
+            print(real_angle)
 
-        a,b = (input("输入舵机目标角度(0~1023)：").split())
-        # a = (input("输入舵机目标角度："))
-        target_angle[0]= int(a)
-        target_angle[1]= int(b)
-        set_angle(target_angle)
-
-        # # Change goal position
-        # if index == 0:
-        #     index = 1
-        # else:
-        #     index = 0
+        real_angle = set_angle(target_angle)
     
     remove_servo(1)
     remove_servo(2)
     close_port()
+    pygame.quit()

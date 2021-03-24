@@ -79,7 +79,7 @@ if __name__ == "__main__":
     init_servo(1)
     init_servo(2)
     # target_angle = [0]*12 # 12个舵机位置
-    target_angle = [512, 510]
+    target_angle = [430, 410]
     set_angle(target_angle)
 
     flag, cap = init_camera(0)
@@ -93,6 +93,8 @@ if __name__ == "__main__":
     cam_1 = Cam()
     cam_1.init_IM(827.678512401081, 827.856142111345,
                   649.519595992254, 479.829876653072)
+    # cam_1.init_IM(812.3122536784955, 811.5918123346368,  # 鱼眼
+    #               646.5710723320936, 478.3398614399181)
     cam_1_T_para_defult = [[0, 0, 0], -3000, -1500, -500]
     cam_1_T_para = copy.deepcopy(cam_1_T_para_defult)
     cam_1.init_T(*cam_1_T_para)
@@ -120,8 +122,8 @@ if __name__ == "__main__":
         topview.init_view()
 
         # 从舵机角度计算cam_1_T_para
-        cam_1_T_para[0][0] = (real_angle[1] - 510) * 0.3
-        cam_1_T_para[0][2] = (real_angle[0] - 512) * 0.3
+        cam_1_T_para[0][0] = (real_angle[1] - 410) * 0.308 # 舵机0-585对应180°
+        cam_1_T_para[0][2] = (real_angle[0] - 430) * 0.308 
         cam_1.init_T(*cam_1_T_para)
 
         pixel_0 = []
@@ -143,7 +145,8 @@ if __name__ == "__main__":
                 np.int).T.tolist()[0:2]), 20, (0, 255, 0), -1)
         
         ret, frame = cap.read()
-        frame_undistort = undistort_fisheye(frame)
+        frame_undistort = undistort(frame)
+        # frame_undistort = undistort_fisheye(frame)
 
         frame_projected = cv2.warpPerspective(
             frame_undistort, M_inv, (1000, 600), borderValue=(255, 255, 255))
@@ -176,12 +179,12 @@ if __name__ == "__main__":
         if joystick:
             # A 退出 B 复位
             axis, button, hat = joystick_input(joystick)
-            target_angle[0] = 512 + int(axis[3] * 200)
-            target_angle[1] = 510 + int(axis[1] * 100)
+            target_angle[0] = 430 + int(axis[0] * 200)
+            target_angle[1] = 410 + int(axis[1] * 100)
             if button[0] == 1:
                 break
             elif button[1] == 1:
-                target_angle = [512, 510]
+                target_angle = [430, 410]
             
         else:
             k = cv2.waitKey(1) & 0xFF
