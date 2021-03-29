@@ -84,14 +84,15 @@ def undistort_fisheye(frame):
     return undistorted_img
 
 def at_detect(frame):
-    at_detector = Detector(families='tag36h11',
-                           nthreads=1,
-                           quad_decimate=1.0,
-                           quad_sigma=0.0,
-                           refine_edges=1,
-                           decode_sharpening=0.25,
-                           debug=0)
-
+    if 'at_detector' not in globals():
+        global at_detector
+        at_detector = Detector(families='tag36h11',
+                            nthreads=8,
+                            quad_decimate=2.0,
+                            quad_sigma=0.0,
+                            refine_edges=1,
+                            decode_sharpening=0.25,
+                            debug=0)
     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     tags = at_detector.detect(
         frame_gray, estimate_tag_pose=False, camera_params=None, tag_size=None)
@@ -130,10 +131,11 @@ def save_image(img, rename_by_time):
     print("save img successfuly!")
     print(filename)
 
-def cal_fps(filter_length):
+def cal_fps():
     '''
-    filter_length 帧率计数平滑
+    平滑计算帧率
     '''
+    filter_length = 10
     if 'timestamp' not in globals():
         global timestamp
         timestamp = [time.time()] * filter_length  # 平滑初始化
@@ -157,9 +159,9 @@ if __name__ == "__main__":
         frame_undistort = undistort_fisheye(frame)
         # frame_undistort = undistort(frame)
 
-        # frame_undistort = at_detect(frame_undistort)
+        frame_undistort = at_detect(frame_undistort)
 
-        cv2.putText(frame_undistort, "FPS:" + str(cal_fps(10)),
+        cv2.putText(frame_undistort, "FPS:" + str(cal_fps()),
                     (0, 25), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 255, 0), 2)
         cv2.imshow("Capture", frame_undistort)
 

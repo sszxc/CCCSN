@@ -11,8 +11,10 @@ from Xbox import *
 from VirtualCam import Cam
 import copy
 
+
 def rad(x):
     return x * np.pi / 180
+
 
 def Perspective_Transformation(img, anglex, angley, anglez):
     w, h = img.shape[0:2]
@@ -79,7 +81,8 @@ if __name__ == "__main__":
     init_servo(1)
     init_servo(2)
     # target_angle = [0]*12 # 12个舵机位置
-    target_angle = [430, 410]
+    angle_zero = [430, 410]
+    target_angle = copy.deepcopy(angle_zero)
     set_angle(target_angle)
 
     flag, cap = init_camera(0)
@@ -117,13 +120,27 @@ if __name__ == "__main__":
     joystick = joyinit()
 
     while (flag):
+        time_start = time.time()
+
+        ret, frame = cap.read()
+        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        time_getpic = time.time() - time_start
+
+        frame_undistort = undistort(frame)
+        # frame_undistort = undistort_fisheye(frame)
+        time_undistort = time.time() - time_start
+
+        frame_undistort = at_detect(frame_undistort)
+
+        time_tag = time.time() - time_start
+
         real_angle = set_angle(target_angle)
 
         topview.init_view()
 
         # 从舵机角度计算cam_1_T_para
-        cam_1_T_para[0][0] = (real_angle[1] - 410) * 0.308 # 舵机0-585对应180°
-        cam_1_T_para[0][2] = (real_angle[0] - 430) * 0.308 
+        cam_1_T_para[0][0] = (real_angle[1] - angle_zero[1]) * 0.308  # 舵机0-585对应180°
+        cam_1_T_para[0][2] = (real_angle[0] - angle_zero[0]) * 0.308
         cam_1.init_T(*cam_1_T_para)
 
         pixel_0 = []
@@ -143,13 +160,15 @@ if __name__ == "__main__":
             corner_projected /= corner_projected[2]  # 归一化
             cv2.circle(topview.img, tuple(corner_projected.astype(
                 np.int).T.tolist()[0:2]), 20, (0, 255, 0), -1)
-        
-        ret, frame = cap.read()
-        frame_undistort = undistort(frame)
-        # frame_undistort = undistort_fisheye(frame)
 
         frame_projected = cv2.warpPerspective(
             frame_undistort, M_inv, (1000, 600), borderValue=(255, 255, 255))
+        
+        # 关闭图像显示
+        # frame_projected = np.zeros((600, 1000), dtype=np.uint8)
+        # frame_projected = cv2.cvtColor(frame_projected, cv2.COLOR_GRAY2BGR)
+
+        time_project = time.time() - time_start
 
         # # 黑边
         # frame_undistort = cv2.copyMakeBorder(
@@ -172,20 +191,32 @@ if __name__ == "__main__":
         # frame_undistort = cv2.resize(
         #     frame_undistort, (0, 0), fx=0.25, fy=0.25, interpolation=cv2.INTER_NEAREST)
 
-        cv2.putText(frame_projected, "FPS:" + str(cal_fps(10)),
+        time_end = time.time() - time_start
+
+        cv2.putText(frame_projected, "FPS:" + str(math.floor(1.0/time_end)),
                     (0, 25), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 255, 0), 2)
+        cv2.putText(frame_projected, "getpic:" + str(round(time_getpic*1000, 3))+"ms",
+                    (0, 45), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 255, 0), 2)
+        cv2.putText(frame_projected, "undistort:" + str(round(time_undistort*1000, 3))+"ms",
+                    (0, 65), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 255, 0), 2)
+        cv2.putText(frame_projected, "apriltag:" + str(round(time_tag*1000, 3))+"ms",
+                    (0, 85), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 255, 0), 2)
+        cv2.putText(frame_projected, "project:" + str(round(time_project*1000, 3))+"ms",
+                    (0, 105), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 255, 0), 2)
         cv2.imshow("Capture", frame_projected)
 
         if joystick:
-            # A 退出 B 复位
+            # A 退出 B 复位 X 零位
             axis, button, hat = joystick_input(joystick)
-            target_angle[0] = 430 + int(axis[0] * 200)
-            target_angle[1] = 410 + int(axis[1] * 100)
+            target_angle[0] = angle_zero[0] + int(axis[0] * 200)
+            target_angle[1] = angle_zero[1] + int(axis[1] * 100)
             if button[0] == 1:
                 break
             elif button[1] == 1:
-                target_angle = [430, 410]
-            
+                target_angle = angle_zero
+            elif button[2] == 1:
+                angle_zero = list(real_angle)
+
         else:
             k = cv2.waitKey(1) & 0xFF
             if k == ord('A'):
