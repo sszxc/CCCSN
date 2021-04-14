@@ -1,9 +1,10 @@
 # Author: Xuechao Zhang
 # Date: March 22th, 2021
 # Description: 获取Xbox手柄的输入作为调试
-
-# 适用于 Xbox One 手柄 XPS15 电脑
-# DELL7070 电脑上仍然有 bug
+#               适用于 Xbox One 手柄 XPS15 电脑
+#               DELL7070 电脑上仍然有获取按键 bug
+#               可用蓝牙/有线连接
+#               先在控制面板→设备和打印机找一下Controller设备
 
 import pygame
 import time

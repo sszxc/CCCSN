@@ -159,7 +159,7 @@ if __name__ == "__main__":
         frame_undistort = undistort_fisheye(frame)
         # frame_undistort = undistort(frame)
 
-        frame_undistort = at_detect(frame_undistort)
+        # frame_undistort = at_detect(frame_undistort)
 
         cv2.putText(frame_undistort, "FPS:" + str(cal_fps()),
                     (0, 25), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 255, 0), 2)

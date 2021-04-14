@@ -36,8 +36,8 @@ ADDR_STS_PRESENT_POSITION  = 56
 # 连接设置
 SCS1_ID                     = 1                 # SCServo#1 舵机ID : 1
 SCS2_ID                     = 2                 # SCServo#1 舵机ID : 2
-BAUDRATE                    = 1000000           # SCServo default baudrate : 1000000
-DEVICENAME                  = 'COM4'    # Check which port is being used on your controller
+# BAUDRATE                    = 1000000           # SCServo default baudrate : 1000000
+# DEVICENAME                  = 'COM6'    # Check which port is being used on your controller
                                                 # ex) Windows: "COM1"   Linux: "/dev/ttyUSB0" Mac: "/dev/tty.usbserial-*"
 
 # 简单往返测试参数
@@ -53,7 +53,8 @@ SCS_MAXIMUM_POSITION_VALUE  = 1000              # and this value (note that the 
 index = 0
 scs_goal_position = [SCS_MINIMUM_POSITION_VALUE, SCS_MAXIMUM_POSITION_VALUE]         # Goal position
 
-def init_port():
+
+def init_port(DEVICENAME, BAUDRATE=1000000):
     '''
     打开端口 初始化波特率
     '''
@@ -184,7 +185,7 @@ def close_port():
     return 0
 
 if __name__ == "__main__":
-    init_port()
+    init_port('COM6')
 
     init_servo(1)
     init_servo(2)

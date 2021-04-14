@@ -1,7 +1,6 @@
 # Author: Xuechao Zhang
 # Date: March 2nd, 2021
 # Description: USB 免驱摄像头图像采集
-#               包括 MATLAB 标定的相机内参
 #               AprilTag 使用个人开发者复现版本
 
 import sys

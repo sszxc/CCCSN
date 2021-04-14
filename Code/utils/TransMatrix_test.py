@@ -1,4 +1,7 @@
 # -*- coding:utf-8 -*-
+
+# 变换矩阵乘法的一些测试
+
 import cv2
 import numpy as np
 

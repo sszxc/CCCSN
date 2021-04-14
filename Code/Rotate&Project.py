@@ -77,11 +77,11 @@ def Perspective_Transformation(img, anglex, angley, anglez):
 
 
 if __name__ == "__main__":
-    init_port()
+    init_port('COM8')
     init_servo(1)
     init_servo(2)
     # target_angle = [0]*12 # 12个舵机位置
-    angle_zero = [430, 410]
+    angle_zero = [500, 500]
     target_angle = copy.deepcopy(angle_zero)
     set_angle(target_angle)
 
@@ -169,27 +169,6 @@ if __name__ == "__main__":
         # frame_projected = cv2.cvtColor(frame_projected, cv2.COLOR_GRAY2BGR)
 
         time_project = time.time() - time_start
-
-        # # 黑边
-        # frame_undistort = cv2.copyMakeBorder(
-        #     frame_undistort, 200, 200, 200, 200, cv2.BORDER_CONSTANT, 0)
-
-        # # 平移
-        # offset = -2460 * \
-        #     math.sin(math.radians(
-        #         510-target_angle[1]*300/1024))/0.001208*0.0001
-        # mat_translation = np.float32([[1, 0, 0], [0, 1, offset]])
-        # frame_undistort = cv2.warpAffine(
-        #     frame_undistort, mat_translation, frame_undistort.shape[0:2])
-
-        # # 透视
-        # frame_undistort = Perspective_Transformation(
-        #     frame_undistort, (510-target_angle[1])*300/1024*2.0, 0, 0)
-        # 检测
-        # frame_undistort = at_detect(frame_undistort)
-
-        # frame_undistort = cv2.resize(
-        #     frame_undistort, (0, 0), fx=0.25, fy=0.25, interpolation=cv2.INTER_NEAREST)
 
         time_end = time.time() - time_start
 

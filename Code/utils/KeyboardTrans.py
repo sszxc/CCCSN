@@ -1,6 +1,6 @@
 # 透视变换 任意角度 三维透视 python c++ opencv两种语言
 # 效果图：键盘控制各个x，y，z，还有fov数值
-# https: // www.cnblogs.com/yanghailin/p/11737085.html
+# https://www.cnblogs.com/yanghailin/p/11737085.html
 
 # -*- coding:utf-8 -*-
 import cv2
@@ -11,7 +11,7 @@ def rad(x):
   return x * np.pi / 180
 
 
-img = cv2.imread("Code/1.jpg")
+img = cv2.imread("img/1.jpg")
 cv2.namedWindow("original", 0)
 cv2.imshow("original", img)
 
