@@ -1,3 +1,7 @@
+# Author: Xuechao Zhang
+# Date: April 14th, 2021
+# Description: 多线程开相机 没写明白
+
 from multiprocessing import Process, Queue
 import numpy as np
 import cv2

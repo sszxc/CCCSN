@@ -21,6 +21,9 @@ def init_camera(ID):
     if flag:
         print("init...")
         # print(cap.set(6, cv2.VideoWriter.fourcc('M', 'J', 'P', 'G')))
+        # cap.set(3, 640)
+        # cap.set(4, 400)
+        # cap.set(5, 240.0)
         cap.set(3, 1280)
         cap.set(4, 800)
         cap.set(5, 120.0)
@@ -35,13 +38,20 @@ def init_camera(ID):
     return flag, cap
 
 def undistort(frame):
-    # 1280*800 112122-112340
-    fx = 827.678512401081
-    cx = 649.519595992254
-    fy = 827.856142111345
-    cy = 479.829876653072
-    k1, k2, p1, p2, k3 = -0.335814019871572, 0.101431758719313, 0.0, 0.0, 0.0
+    # # 1280*800 112122-112340
+    # fx = 827.678512401081
+    # cx = 649.519595992254
+    # fy = 827.856142111345
+    # cy = 479.829876653072
+    # k1, k2, p1, p2, k3 = -0.335814019871572, 0.101431758719313, 0.0, 0.0, 0.0
 
+    # 170度 1280*800
+    fx = 640.314848396396
+    cx = 587.652366196605
+    fy = 642.765274234341
+    cy = 323.040226037541
+    k1, k2, p1, p2, k3 = -0.316424682686498, 0.0684998923953000, 0.0, 0.0, 0.0
+    
     # 相机坐标系到像素坐标系的转换矩阵
     k = np.array([
         [fx, 0, cx],
@@ -86,9 +96,9 @@ def undistort_fisheye(frame):
 def at_detect(frame):
     if 'at_detector' not in globals():
         global at_detector
-        at_detector = Detector(families='tag36h11',
+        at_detector = Detector(families='tag16h5',
                             nthreads=8,
-                            quad_decimate=2.0,
+                            quad_decimate=1.0,
                             quad_sigma=0.0,
                             refine_edges=1,
                             decode_sharpening=0.25,
@@ -156,10 +166,10 @@ if __name__ == "__main__":
         # cv2.imshow("Capture_raw", frame)
 
         # frame_undistort = frame
-        frame_undistort = undistort_fisheye(frame)
-        # frame_undistort = undistort(frame)
+        frame_undistort = undistort(frame)
+        # frame_undistort = undistort_fisheye(frame)
 
-        # frame_undistort = at_detect(frame_undistort)
+        frame_undistort = at_detect(frame_undistort)
 
         cv2.putText(frame_undistort, "FPS:" + str(cal_fps()),
                     (0, 25), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 255, 0), 2)
@@ -167,7 +177,7 @@ if __name__ == "__main__":
 
         k = cv2.waitKey(1) & 0xFF
         if k == ord('s') or k == ord('S'):  # 按下s键，进入下面的保存图片操作
-            save_image(frame_undistort, False)
+            save_image(frame_undistort, True)
         elif k == ord('q') or k == ord('Q'):  # 按下q键，程序退出
             break
 

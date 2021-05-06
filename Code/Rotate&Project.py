@@ -77,11 +77,12 @@ def Perspective_Transformation(img, anglex, angley, anglez):
 
 
 if __name__ == "__main__":
-    init_port('COM8')
+    init_port('COM7')
     init_servo(1)
     init_servo(2)
     # target_angle = [0]*12 # 12个舵机位置
-    angle_zero = [500, 500]
+    angle_zero = [512, 634]  # 1024 - 360°
+                            # 492 904 广角摄像头大约覆盖
     target_angle = copy.deepcopy(angle_zero)
     set_angle(target_angle)
 
@@ -98,7 +99,7 @@ if __name__ == "__main__":
                   649.519595992254, 479.829876653072)
     # cam_1.init_IM(812.3122536784955, 811.5918123346368,  # 鱼眼
     #               646.5710723320936, 478.3398614399181)
-    cam_1_T_para_defult = [[0, 0, 0], -3000, -1500, -500]
+    cam_1_T_para_defult = [[0, 0, 0], -4100, -1500, -248] # 距离边角90 90cm # 宽度还是不太准
     cam_1_T_para = copy.deepcopy(cam_1_T_para_defult)
     cam_1.init_T(*cam_1_T_para)
 
@@ -139,8 +140,8 @@ if __name__ == "__main__":
         topview.init_view()
 
         # 从舵机角度计算cam_1_T_para
-        cam_1_T_para[0][0] = (real_angle[1] - angle_zero[1]) * 0.308  # 舵机0-585对应180°
-        cam_1_T_para[0][2] = (real_angle[0] - angle_zero[0]) * 0.308
+        cam_1_T_para[0][2] = (real_angle[1] - angle_zero[1]) * 0.308  # 舵机0-585对应180°
+        cam_1_T_para[0][0] = (real_angle[0] - angle_zero[0]) * 0.308
         cam_1.init_T(*cam_1_T_para)
 
         pixel_0 = []
@@ -182,13 +183,15 @@ if __name__ == "__main__":
                     (0, 85), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 255, 0), 2)
         cv2.putText(frame_projected, "project:" + str(round(time_project*1000, 3))+"ms",
                     (0, 105), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 255, 0), 2)
+        cv2.putText(frame_projected, "angle:" + str(real_angle[0])+"," + str(real_angle[1]),
+                    (0, 145), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 255, 0), 2)
         cv2.imshow("Capture", frame_projected)
 
         if joystick:
             # A 退出 B 复位 X 零位
             axis, button, hat = joystick_input(joystick)
-            target_angle[0] = angle_zero[0] + int(axis[0] * 200)
-            target_angle[1] = angle_zero[1] + int(axis[1] * 100)
+            target_angle[0] = angle_zero[0] + int(axis[1] * 200)
+            target_angle[1] = angle_zero[1] + int(axis[0] * 200)
             if button[0] == 1:
                 break
             elif button[1] == 1:

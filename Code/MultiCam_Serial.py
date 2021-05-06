@@ -1,3 +1,7 @@
+# Author: Xuechao Zhang
+# Date: May 5th, 2021
+# Description: 打开两个相机 并排显示
+
 import numpy as np
 import cv2
 import time
@@ -6,7 +10,7 @@ def cal_fps():
     '''
     平滑计算帧率
     '''
-    filter_length = 10
+    filter_length = 20
     if 'timestamp' not in globals():
         global timestamp
         timestamp = [time.time()] * filter_length  # 平滑初始化
@@ -20,16 +24,21 @@ def cal_fps():
 
 
 if __name__ == '__main__':
+    cap0 = cv2.VideoCapture(0)
+    cap1 = cv2.VideoCapture(1)
+
+    cap0.set(3, 640)
+    cap0.set(4, 480)
+    cap0.set(5, 120.0)
+    cap1.set(3, 640)
+    cap1.set(4, 480)
+    cap1.set(5, 120.0)
 
     while True:
-        cap0 = cv2.VideoCapture(0)
         ret, frame0 = cap0.read()
-        cap0.release()
-        # cap1 = cv2.VideoCapture(1)
-        # ret, frame1 = cap1.read()
-        # cap1.release()
+        ret, frame1 = cap1.read()
 
-        panel = np.hstack((frame0, frame0))
+        panel = np.hstack((frame0, frame1))
 
         cv2.putText(panel, "FPS:" + str(cal_fps()),
                     (0, 25), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 255, 0), 2)
@@ -39,4 +48,6 @@ if __name__ == '__main__':
         if keyPress == ord('Q'):
             break
 
+    cap0.release()
+    cap1.release()
     cv2.destroyAllWindows()
