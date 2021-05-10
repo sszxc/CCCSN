@@ -1,6 +1,7 @@
 # Author: Xuechao Zhang
 # Date: May 5th, 2021
 # Description: 打开两个相机 并排显示
+#               软件上支持同时开启 之前的问题出在硬件上
 
 import numpy as np
 import cv2

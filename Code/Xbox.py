@@ -18,7 +18,8 @@ def joyinit():
         # axes = joystick.get_numaxes() # 6个
         # buttons = joystick.get_numbuttons()  # 16个 只知道十个有用
         # hats = joystick.get_numhats()  # 1个
-    return joystick
+        return joystick
+    return 0
 
 def joystick_input(joystick):
     # for event in pygame.event.get():  # User did something
