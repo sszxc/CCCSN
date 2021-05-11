@@ -11,7 +11,8 @@ from Xbox import *
 import copy
 
 # CONTROLLER_TYPE = 0 # XPS15
-CONTROLLER_TYPE = 1 # DELL7070
+CONTROLLER_TYPE = 1  # DELL7070
+
 
 class Cam:
     def __init__(self):
@@ -50,6 +51,7 @@ class Cam:
         '''
         相机与世界之间的转换矩阵
         '''
+        self.dz = dz  # 姑且用来衡量距离对分辨率的影响
         RM = self.EulerToRM(euler)
         T_43 = np.r_[RM, [[0, 0, 0]]]
         # self.T_cam2world = np.c_[T_43, [dx, dy, dz, 1]]
@@ -63,12 +65,27 @@ class Cam:
         )
         self.T_cam2world = np.dot(T_rotate, T_trans)  # 相乘顺序很关键
         self.T_world2cam = np.linalg.inv(self.T_cam2world)
-        # 计算相机聚焦中心 负号暂时没明白
-        direction = np.dot(np.array([0, 0, 1], dtype=np.float), RM)
-        focus_x = dx - dz/direction[2]*direction[0]
-        focus_y = dy - dz/direction[2]*direction[1]
+        # 计算相机聚焦中心 竖直向下的向量经过RM矩阵旋转得到法向
+        # 正负号暂时没明白
+        self.direction = np.dot(
+            np.array([0, 0, 1], dtype=np.float), RM)  # 方向向量
+        focus_x = dx - dz/self.direction[2]*self.direction[0]
+        focus_y = dy - dz/self.direction[2]*self.direction[1]
         # print(-focus_x,-focus_y)
-        self.FocusCenter = np.array([[-focus_x], [-focus_y], [0]], dtype=float)
+        self.Focus = np.array([[-focus_x], [-focus_y], [0]], dtype=float)
+
+    def init_M(self, pixel_before, pixel_after):
+        '''
+        点对计算相机到全局的图片变换矩阵
+        '''
+        self.M = cv2.getPerspectiveTransform(pixel_before, pixel_after)
+        self.M_inv = np.linalg.inv(self.M)
+
+    def init_FocusCenter(self, center):
+        '''
+        用俯视图拍出来的中心点
+        '''
+        self.FocusCenter = center
 
     def init_view(self, height=600, width=1000, color=(255, 255, 255)):
         '''
@@ -101,55 +118,119 @@ class Cam:
         pixel = tuple(dot.astype(np.int).T.tolist()[0][0:2])  # 去掉第三维的1 转tuple
         return pixel
 
+    def ValidView(self, distort=False, update=True):
+        '''
+        计算节点相机实际覆盖范围
+        distort考虑畸变效果 效率较低 功能还存在问题
+        update在重复调用的时候可以关掉
+        '''
+        if update:
+            if distort:
+                # 1280*800 112122-112340
+                fx = 827.678512401081
+                cx = 649.519595992254
+                fy = 827.856142111345
+                cy = 479.829876653072
+                k1, k2, p1, p2, k3 = 0.335814019871572, -0.101431758719313, 0.0, 0.0, 0.0
+
+                # 相机坐标系到像素坐标系的转换矩阵
+                k = np.array([
+                    [fx, 0, cx],
+                    [0, fy, cy],
+                    [0, 0, 1]
+                ])
+                # 畸变系数
+                d = np.array([
+                    k1, k2, p1, p2, k3
+                ])
+                height, width = self.img.shape[:2]
+                mapx, mapy = cv2.initUndistortRectifyMap(
+                    k, d, None, k, (width, height), 5)
+
+                self.imgview = np.zeros((600, 1000, 3), np.uint8)
+                # 遍历相机图片 畸变映射之后投到俯视图
+                # 只要遍历边框就行? 但这样还要填充
+                for h in range(0, height, 5):
+                    for w in range(0, width, 5):
+                        h_distort, w_distort = (mapx[h, w], mapy[h, w])
+                        pixel_in_topview = np.dot(
+                            self.M, np.array([w_distort, h_distort, 1]).T)
+                        pixel_in_topview /= pixel_in_topview[2]  # 归一化
+                        pixel = pixel_in_topview.astype(np.int).T.tolist()[0:2]
+                        if 0 <= pixel[0] and pixel[0] < 600 and 0 <= pixel[1] and pixel[1] < 1000:
+                            self.imgview[tuple(pixel)] = [255, 255, 255]
+                        # print(h,w)
+            else:
+                imgframe_cam = np.zeros(self.img.shape[:2]+(3,), np.uint8)
+                imgframe_cam.fill(255)
+                self.imgview = cv2.warpPerspective(
+                    imgframe_cam, self.M_inv, (1000, 600), borderValue=(0, 0, 0))
+        return self.imgview
+
 
 def randomColor():
     return (0, 0, 0)
     # return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
 
-def distort(img):
+def SensingQuality(heatmap, cameras):
     '''
-    模拟畸变效果 但是需要预留边界 牵扯到外参计算 待完成
+    heatmap: 用灰度表示事件重要性 255不重要→0重要
+    cameras: 用于监控的相机 读取外参、畸变矩阵
+    imgframe: 有效像素 和heatmap一样大
     '''
-    # 1280*800 112122-112340
-    fx = 827.678512401081
-    cx = 649.519595992254
-    fy = 827.856142111345
-    cy = 479.829876653072
-    k1, k2, p1, p2, k3 = 0.335814019871572, -0.101431758719313, 0.0, 0.0, 0.0
+    score = 0
+    score_count = 0
+    height = heatmap.shape[0]
+    weight = heatmap.shape[1]
+    img = np.zeros((height, weight, 3), np.uint8)
 
-    # 相机坐标系到像素坐标系的转换矩阵
-    k = np.array([
-        [fx, 0, cx],
-        [0, fy, cy],
-        [0, 0, 1]
-    ])
-    # 畸变系数
-    d = np.array([
-        k1, k2, p1, p2, k3
-    ])
-    h, w = img.shape[:2]
-    mapx, mapy = cv2.initUndistortRectifyMap(k, d, None, k, (w, h), 5)
-    return cv2.remap(img, mapx, mapy, cv2.INTER_LINEAR)
+    # 叠加一下有效范围
+    imgframe = np.zeros((height, weight, 3), np.uint8)
+    for camera in cameras:
+        imgframe = cv2.add(imgframe, camera.ValidView())
 
+    # range加步长 提高运算速度
+    gap_step = 10
+    for h in range(0, height, gap_step):
+        for w in range(0, weight, gap_step):
+            heat = 255 - heatmap[h, w, 0]  # 灰度
+            Q_perspective = 0  # 视角质量=到中心的距离(之后可以用remap衡量)
+            Q_resolution = 0  # 分辨率质量=每个像素法向距离 高斯函数？
+            Q_pr = 0
+            for camera in cameras:
+                # 全 255 属于有效视野
+                if camera.ValidView(update=False)[h, w].sum() == 765:
+                    dh = h-camera.FocusCenter[1]
+                    dw = w-camera.FocusCenter[0]
 
+                    distance = (dh)**2 + (dw)**2
+                    Q_perspective = max((150000-distance)/150000, 0)  # 0-1 规格化
 
-# def SensingQuality(heatmap, cameras):
-#     '''
-#     heatmap: 用灰度表示事件重要性 255不重要→0重要
-#     cameras: 用于监控的相机 读取外参、畸变矩阵
-#     '''
-#     score = 0
-#     for pixel in heatmap:
-#         for camera in cameras:
-#             Q_perspective
-#             Q_resolution
-#             视角质量=到中心的距离(之后可以用remap衡量 拍不到就是0)
-#             分辨率质量=每个像素法向距离 高斯函数
-#             max(视角质量*分辨率质量)
-#         img[pixel] = 视角质量*分辨率质量(红蓝)
-#         score += pixel.灰度*视角质量*分辨率质量
-#     return score, img
+                    altitude = abs(
+                        np.dot(np.array([dw, dh, 0], dtype=np.float), camera.direction))
+                    Q_resolution = max((5000 - altitude)/5000, 0)  # 0-1 规格化
+                    Q_resolution *= max((8000-camera.dz)/8000, 0)  # 高度对分辨率的影响
+
+                    Q_pr = max(Q_perspective*Q_resolution,
+                               Q_pr)  # 多个相机之间的最高覆盖质量
+
+            if Q_pr != 0:
+                # 红色高质量 蓝色低质量
+                # img[h, w, 0] = 255-Q_pr*255
+                # img[h, w, 2] = Q_pr*255
+                cv2.circle(img, (w, h), 3, (255-Q_pr*255, 120, Q_pr*255), -1)
+
+            score += heat * Q_pr
+            score_count += 1
+
+        # print (h)
+    # 要不要除 还要想一下
+    # if score:
+    #     score /= score_count
+    print("score:", score)
+    return score, img
+
 
 if __name__ == "__main__":
     # 创建理想俯视图相机
@@ -168,7 +249,16 @@ if __name__ == "__main__":
     cam_1_T_para = copy.deepcopy(cam_1_T_para_defult)
     cam_1.init_T(*cam_1_T_para)
 
-    # 在地面上设置一些空间点
+    # 创建第二个相机
+    # 内参来自 1280*800 112122-112340
+    cam_2 = Cam()
+    cam_2.init_IM(827.678512401081, 827.856142111345,
+                  649.519595992254, 479.829876653072)
+    cam_2_T_para_defult = [[0, 0, 0], -2000, -1000, 1500]
+    cam_2_T_para = copy.deepcopy(cam_2_T_para_defult)
+    cam_2.init_T(*cam_2_T_para)
+
+    # 在地面上随意设置一些空间点
     points = [0] * 8
     points[0] = np.array([[0], [0], [0]], dtype=float)
     points[1] = np.array([[0], [3000], [0]], dtype=float)
@@ -191,54 +281,101 @@ if __name__ == "__main__":
     # 初始化手柄控制
     joystick = joyinit()
 
+    # 下次写成 for cam in cameras:
     while 1:
-        print(cam_1_T_para)
+        print("cam1T:", cam_1_T_para)
         cam_1.init_T(*cam_1_T_para)
+        print("cam2T:", cam_2_T_para)
+        cam_2.init_T(*cam_2_T_para)
 
         # 相机初始化
         topview.init_view()
         cam_1.init_view(800, 1280)
+        cam_2.init_view(800, 1280)
 
         # 标记一下相机视角中心
-        cv2.circle(topview.img, topview.capture(cam_1.FocusCenter),
-                   20, (0, 255, 255), -1)
+        cam_1.init_FocusCenter(topview.capture(cam_1.Focus))
+        cam_2.init_FocusCenter(topview.capture(cam_2.Focus))
 
         pixel_0 = []
         pixel_1 = []
+        pixel_2 = []
 
         # 地面点转换到相机坐标
         for point in points:
             color = randomColor()
             pixel_0.append(topview.capture(point))
-            cv2.circle(topview.img, pixel_0[-1], 20, color, -1)
+            # cv2.circle(topview.img, pixel_0[-1], 20, color, -1)
             pixel_1.append(cam_1.capture(point))
-            cv2.circle(cam_1.img, pixel_1[-1], 20, color, -1)
+            # cv2.circle(cam_1.img, pixel_1[-1], 20, color, -1)
+            pixel_2.append(cam_2.capture(point))
 
         # 利用前四个点生成变换矩阵
-        pixel_before = np.float32(pixel_0[0:4])
-        pixel_after = np.float32(pixel_1[0:4])
-        M = cv2.getPerspectiveTransform(pixel_before, pixel_after)
+        pixel_topview = np.float32(pixel_0[0:4])
+        pixel_cam1 = np.float32(pixel_1[0:4])
+        pixel_cam2 = np.float32(pixel_2[0:4])
+        cam_1.init_M(pixel_topview, pixel_cam1)
+        cam_2.init_M(pixel_topview, pixel_cam2)
 
-        # 进行透视变换
-        img_before = cv2.imread('./img/heat1.jpg')
-        img_after = cv2.warpPerspective(img_before, M, (1280, 800), borderValue=(255, 255, 255))
+        # 导入底图 即heatmap
+        img_fullview = cv2.imread('./img/heat2.jpg')
+        # 更新两个相机
+        topview.img = img_fullview
+        img_nodecam = cv2.warpPerspective(
+            img_fullview, cam_1.M, (1280, 800), borderValue=(255, 255, 255))
 
-        # 这个图片可以做成叠加 TODO
-        # topview.img = img_before
-        # img_after = distort(img_after) # 正向模拟畸变 没做好
-        # cam_1.img = cv2.resize(
-        #     img_after, (int(0.5*img_after.shape[1]), int(0.5*img_after.shape[0])))
-
-        M_inv = np.linalg.inv(M)
+        # 从相机角点到投影图 画两个相机
+        corners_projected = []
         for corner in corners:
-            corner_projected = np.dot(M_inv, corner.T)
+            corner_projected = np.dot(cam_1.M_inv, corner.T)
             corner_projected /= corner_projected[2]  # 归一化
-            cv2.circle(topview.img, tuple(corner_projected.astype(np.int).T.tolist()[0:2]), 20, (0, 255, 0), -1)
+            corners_projected.append(tuple(corner_projected.astype(
+                np.int).T.tolist()[0:2]))
+            cv2.circle(topview.img, tuple(corner_projected.astype(
+                np.int).T.tolist()[0:2]), 15, (0, 255, 0), -1)
+        cv2.line(
+            topview.img, corners_projected[0], corners_projected[1], (0, 255, 0))
+        cv2.line(
+            topview.img, corners_projected[1], corners_projected[3], (0, 255, 0))
+        cv2.line(
+            topview.img, corners_projected[2], corners_projected[3], (0, 255, 0))
+        cv2.line(
+            topview.img, corners_projected[2], corners_projected[0], (0, 255, 0))
 
-        # score, img = SensingQuality('./img/heat1.jpg', [cam_1])
+        corners_projected = []
+        for corner in corners:
+            corner_projected = np.dot(cam_2.M_inv, corner.T)
+            corner_projected /= corner_projected[2]  # 归一化
+            corners_projected.append(tuple(corner_projected.astype(
+                np.int).T.tolist()[0:2]))
+            cv2.circle(topview.img, tuple(corner_projected.astype(
+                np.int).T.tolist()[0:2]), 15, (0, 0, 255), -1)
+        cv2.line(
+            topview.img, corners_projected[0], corners_projected[1], (0, 0, 255))
+        cv2.line(
+            topview.img, corners_projected[1], corners_projected[3], (0, 0, 255))
+        cv2.line(
+            topview.img, corners_projected[2], corners_projected[3], (0, 0, 255))
+        cv2.line(
+            topview.img, corners_projected[2], corners_projected[0], (0, 0, 255))
+
+        # 标记一下相机视角中心
+        cv2.circle(topview.img, cam_1.FocusCenter,
+                   10, (0, 255, 255), -1)
+        cv2.circle(topview.img, cam_2.FocusCenter,
+                   10, (0, 255, 255), -1)
+
+        # 计算覆盖质量
+        score, score_img = SensingQuality(
+            img_fullview, [cam_1, cam_2])
+
+        # 节点相机的画面 缩放一下 看起来方便点
+        cam_1.img = cv2.resize(
+            img_nodecam, (int(0.5*img_nodecam.shape[1]), int(0.5*img_nodecam.shape[0])))
 
         cv2.imshow('topview', topview.img)
         cv2.imshow('camview_1', cam_1.img)
+        cv2.imshow('score', score_img)
 
         if joystick:
             # 左摇杆水平位移 右摇杆角度 LT&RT高度
@@ -265,7 +402,7 @@ if __name__ == "__main__":
                     break
                 elif button[1] == 1:
                     cam_1_T_para = copy.deepcopy(cam_1_T_para_defult)
- 
+
         else:
             # WASD平移 ZX高度 UJIKOL旋转 0复位
             k = cv2.waitKey(0) & 0xFF
