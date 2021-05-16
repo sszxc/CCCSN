@@ -7,11 +7,9 @@ import numpy as np
 import cv2
 import random
 import math
-from Xbox import *
+from XboxController.Xbox import *
 import copy
-
-# CONTROLLER_TYPE = 0 # XPS15
-CONTROLLER_TYPE = 1  # DELL7070
+import time
 
 
 class Cam:
@@ -74,11 +72,12 @@ class Cam:
         # print(-focus_x,-focus_y)
         self.Focus = np.array([[-focus_x], [-focus_y], [0]], dtype=float)
 
-    def init_M(self, pixel_before, pixel_after):
+    def init_M2topview(self, points_3D, pixel_topview):
         '''
         点对计算相机到全局的图片变换矩阵
         '''
-        self.M = cv2.getPerspectiveTransform(pixel_before, pixel_after)
+        pixel = [self.capture(point) for point in points_3D]
+        self.M = cv2.getPerspectiveTransform(np.float32(pixel_topview), np.float32(pixel))
         self.M_inv = np.linalg.inv(self.M)
 
     def init_FocusCenter(self, center):
@@ -117,6 +116,39 @@ class Cam:
         dot /= dot[2]  # 归一化
         pixel = tuple(dot.astype(np.int).T.tolist()[0][0:2])  # 去掉第三维的1 转tuple
         return pixel
+
+    def cam_frame_project(self, topviewimg, color):
+        '''
+        相机轮廓投影到俯视图
+        '''
+        # 节点相机的角点
+        height, width = self.img.shape[:2]
+        corners = []
+        corners.append(np.array([0, 0, 1], dtype=np.float32))
+        corners.append(np.array([width, 0, 1], dtype=np.float32))
+        corners.append(np.array([0, height, 1], dtype=np.float32))
+        corners.append(np.array([width, height, 1], dtype=np.float32))
+        # 从相机角点到投影图 画两个相机
+        corners_projected = []
+        for corner in corners:
+            corner_projected = np.dot(self.M_inv, corner.T)
+            corner_projected /= corner_projected[2]  # 归一化
+            corners_projected.append(tuple(corner_projected.astype(
+                np.int).T.tolist()[0:2]))
+            cv2.circle(topviewimg, tuple(corner_projected.astype(
+                np.int).T.tolist()[0:2]), 15, color, -1)
+        cv2.line(
+            topviewimg, corners_projected[0], corners_projected[1], color)
+        cv2.line(
+            topviewimg, corners_projected[1], corners_projected[3], color)
+        cv2.line(
+            topviewimg, corners_projected[2], corners_projected[3], color)
+        cv2.line(
+            topviewimg, corners_projected[2], corners_projected[0], color)
+        # 标记一下相机视角中心
+        cv2.circle(topviewimg, self.FocusCenter,
+                    10, (0, 255, 255), -1)
+        return 0
 
     def ValidView(self, distort=False, update=True):
         '''
@@ -179,6 +211,7 @@ def SensingQuality(heatmap, cameras):
     cameras: 用于监控的相机 读取外参、畸变矩阵
     imgframe: 有效像素 和heatmap一样大
     '''
+    start_time = time.time()
     score = 0
     score_count = 0
     height = heatmap.shape[0]
@@ -225,12 +258,79 @@ def SensingQuality(heatmap, cameras):
             score_count += 1
 
         # print (h)
-    # 要不要除 还要想一下
-    # if score:
-    #     score /= score_count
+    end_time = time.time()
     print("score:", score)
+    print("time cost:", end_time-start_time)
     return score, img
 
+def update_by_controller(T_para, T_para_defult, CONTROLLER_TYPE=1):
+    '''
+    CONTROLLER_TYPE：不同电脑对手柄的配置不同 0:XPS15 1:DELL7070
+    Quit_command：触发退出命令
+    手柄：左摇杆水平位移 右摇杆角度 LT&RT高度 A退出 B复位
+    键盘：WASD平移 ZX高度 UJIKOL旋转 0复位 Q退出
+    '''
+    Quit_command = 0
+    if 'joystick' not in globals():
+        # 初始化手柄控制
+        global joystick
+        joystick = joyinit()
+    if joystick:
+        if CONTROLLER_TYPE == 0:
+            axis, button, hat = joystick_input(joystick)
+            T_para[1] += axis[0] * -30
+            T_para[2] += axis[1] * -30
+            T_para[3] += (axis[4] - axis[5]) * 30
+            T_para[0][1] = axis[2] * -50
+            T_para[0][0] = axis[3] * 50
+            if button[0] == 1:
+                Quit_command = 1
+            elif button[1] == 1:
+                T_para = copy.deepcopy(T_para_defult)
+        elif CONTROLLER_TYPE == 1:
+            axis, button, hat = joystick_input(joystick)
+            T_para[1] += axis[0] * -30
+            T_para[2] += axis[1] * -30
+            T_para[3] += axis[2] * 50
+            T_para[0][1] = axis[3] * -50
+            T_para[0][0] = axis[4] * 50
+            if button[0] == 1:
+                Quit_command = 1
+            elif button[1] == 1:
+                T_para = copy.deepcopy(T_para_defult)
+
+    else:
+        k = cv2.waitKey(0) & 0xFF
+        if k == ord('q') or k == ord('Q'):
+            Quit_command = 1
+        elif k == ord('A'):
+            T_para[1] += 1000
+        elif k == ord('D'):
+            T_para[1] -= 1000
+        elif k == ord('W'):
+            T_para[2] += 1000
+        elif k == ord('S'):
+            T_para[2] -= 1000
+        elif k == ord('Z'):
+            T_para[3] += 1000
+        elif k == ord('X'):
+            T_para[3] -= 1000
+        elif k == ord('U'):
+            T_para[0][0] += 10
+        elif k == ord('J'):
+            T_para[0][0] -= 10
+        elif k == ord('I'):
+            T_para[0][1] += 10
+        elif k == ord('K'):
+            T_para[0][1] -= 10
+        elif k == ord('O'):
+            T_para[0][2] += 10
+        elif k == ord('L'):
+            T_para[0][2] -= 10
+        elif k == ord('0'):
+            T_para = T_para_defult
+
+    return T_para, Quit_command
 
 if __name__ == "__main__":
     # 创建理想俯视图相机
@@ -271,16 +371,6 @@ if __name__ == "__main__":
     # points[6] = np.array([[1980], [900], [0]], dtype=float)
     # points[7] = np.array([[2400], [1800], [0]], dtype=float)
 
-    # 节点相机的角点
-    corners = []
-    corners.append(np.array([0, 0, 1], dtype=np.float32))
-    corners.append(np.array([1280, 0, 1], dtype=np.float32))
-    corners.append(np.array([0, 800, 1], dtype=np.float32))
-    corners.append(np.array([1280, 800, 1], dtype=np.float32))
-
-    # 初始化手柄控制
-    joystick = joyinit()
-
     # 下次写成 for cam in cameras:
     while 1:
         print("cam1T:", cam_1_T_para)
@@ -297,73 +387,22 @@ if __name__ == "__main__":
         cam_1.init_FocusCenter(topview.capture(cam_1.Focus))
         cam_2.init_FocusCenter(topview.capture(cam_2.Focus))
 
-        pixel_0 = []
-        pixel_1 = []
-        pixel_2 = []
 
-        # 地面点转换到相机坐标
-        for point in points:
-            color = randomColor()
-            pixel_0.append(topview.capture(point))
-            # cv2.circle(topview.img, pixel_0[-1], 20, color, -1)
-            pixel_1.append(cam_1.capture(point))
-            # cv2.circle(cam_1.img, pixel_1[-1], 20, color, -1)
-            pixel_2.append(cam_2.capture(point))
+        # 利用前四个点生成变换矩阵    
+        pixel_topview = [topview.capture(point) for point in points[0:4]]
+        cam_1.init_M2topview(points[0:4], pixel_topview)
+        cam_2.init_M2topview(points[0:4], pixel_topview)
 
-        # 利用前四个点生成变换矩阵
-        pixel_topview = np.float32(pixel_0[0:4])
-        pixel_cam1 = np.float32(pixel_1[0:4])
-        pixel_cam2 = np.float32(pixel_2[0:4])
-        cam_1.init_M(pixel_topview, pixel_cam1)
-        cam_2.init_M(pixel_topview, pixel_cam2)
-
-        # 导入底图 即heatmap
+        # 导入底图 即 heatmap
         img_fullview = cv2.imread('./img/heat2.jpg')
         # 更新两个相机
         topview.img = img_fullview
-        img_nodecam = cv2.warpPerspective(
+        img_nodecam1 = cv2.warpPerspective(
             img_fullview, cam_1.M, (1280, 800), borderValue=(255, 255, 255))
 
-        # 从相机角点到投影图 画两个相机
-        corners_projected = []
-        for corner in corners:
-            corner_projected = np.dot(cam_1.M_inv, corner.T)
-            corner_projected /= corner_projected[2]  # 归一化
-            corners_projected.append(tuple(corner_projected.astype(
-                np.int).T.tolist()[0:2]))
-            cv2.circle(topview.img, tuple(corner_projected.astype(
-                np.int).T.tolist()[0:2]), 15, (0, 255, 0), -1)
-        cv2.line(
-            topview.img, corners_projected[0], corners_projected[1], (0, 255, 0))
-        cv2.line(
-            topview.img, corners_projected[1], corners_projected[3], (0, 255, 0))
-        cv2.line(
-            topview.img, corners_projected[2], corners_projected[3], (0, 255, 0))
-        cv2.line(
-            topview.img, corners_projected[2], corners_projected[0], (0, 255, 0))
-
-        corners_projected = []
-        for corner in corners:
-            corner_projected = np.dot(cam_2.M_inv, corner.T)
-            corner_projected /= corner_projected[2]  # 归一化
-            corners_projected.append(tuple(corner_projected.astype(
-                np.int).T.tolist()[0:2]))
-            cv2.circle(topview.img, tuple(corner_projected.astype(
-                np.int).T.tolist()[0:2]), 15, (0, 0, 255), -1)
-        cv2.line(
-            topview.img, corners_projected[0], corners_projected[1], (0, 0, 255))
-        cv2.line(
-            topview.img, corners_projected[1], corners_projected[3], (0, 0, 255))
-        cv2.line(
-            topview.img, corners_projected[2], corners_projected[3], (0, 0, 255))
-        cv2.line(
-            topview.img, corners_projected[2], corners_projected[0], (0, 0, 255))
-
-        # 标记一下相机视角中心
-        cv2.circle(topview.img, cam_1.FocusCenter,
-                   10, (0, 255, 255), -1)
-        cv2.circle(topview.img, cam_2.FocusCenter,
-                   10, (0, 255, 255), -1)
+        # 相机投影到俯视图
+        cam_1.cam_frame_project(topview.img,(0,255,0))
+        cam_2.cam_frame_project(topview.img,(0,0,255))
 
         # 计算覆盖质量
         score, score_img = SensingQuality(
@@ -371,68 +410,16 @@ if __name__ == "__main__":
 
         # 节点相机的画面 缩放一下 看起来方便点
         cam_1.img = cv2.resize(
-            img_nodecam, (int(0.5*img_nodecam.shape[1]), int(0.5*img_nodecam.shape[0])))
+            img_nodecam1, (int(0.5*img_nodecam1.shape[1]), int(0.5*img_nodecam1.shape[0])))
 
         cv2.imshow('topview', topview.img)
         cv2.imshow('camview_1', cam_1.img)
         cv2.imshow('score', score_img)
 
-        if joystick:
-            # 左摇杆水平位移 右摇杆角度 LT&RT高度
-            # A 退出 B 复位
-            if CONTROLLER_TYPE == 0:
-                axis, button, hat = joystick_input(joystick)
-                cam_1_T_para[1] += axis[0] * -30
-                cam_1_T_para[2] += axis[1] * -30
-                cam_1_T_para[3] += (axis[4] - axis[5]) * 30
-                cam_1_T_para[0][1] = axis[2] * -50
-                cam_1_T_para[0][0] = axis[3] * 50
-                if button[0] == 1:
-                    break
-                elif button[1] == 1:
-                    cam_1_T_para = copy.deepcopy(cam_1_T_para_defult)
-            elif CONTROLLER_TYPE == 1:
-                axis, button, hat = joystick_input(joystick)
-                cam_1_T_para[1] += axis[0] * -30
-                cam_1_T_para[2] += axis[1] * -30
-                cam_1_T_para[3] += axis[2] * 50
-                cam_1_T_para[0][1] = axis[3] * -50
-                cam_1_T_para[0][0] = axis[4] * 50
-                if button[0] == 1:
-                    break
-                elif button[1] == 1:
-                    cam_1_T_para = copy.deepcopy(cam_1_T_para_defult)
-
-        else:
-            # WASD平移 ZX高度 UJIKOL旋转 0复位
-            k = cv2.waitKey(0) & 0xFF
-            if k == ord('q') or k == ord('Q'):  # 按下q键，程序退出
-                break
-            elif k == ord('A'):
-                cam_1_T_para[1] += 1000
-            elif k == ord('D'):
-                cam_1_T_para[1] -= 1000
-            elif k == ord('W'):
-                cam_1_T_para[2] += 1000
-            elif k == ord('S'):
-                cam_1_T_para[2] -= 1000
-            elif k == ord('Z'):
-                cam_1_T_para[3] += 1000
-            elif k == ord('X'):
-                cam_1_T_para[3] -= 1000
-            elif k == ord('U'):
-                cam_1_T_para[0][0] += 10
-            elif k == ord('J'):
-                cam_1_T_para[0][0] -= 10
-            elif k == ord('I'):
-                cam_1_T_para[0][1] += 10
-            elif k == ord('K'):
-                cam_1_T_para[0][1] -= 10
-            elif k == ord('O'):
-                cam_1_T_para[0][2] += 10
-            elif k == ord('L'):
-                cam_1_T_para[0][2] -= 10
-            elif k == ord('0'):
-                cam_1_T_para = cam_1_T_para_defult
+        # 用手柄更新云台参数
+        cam_1_T_para , Quit_command = update_by_controller(
+            cam_1_T_para, cam_1_T_para_defult, CONTROLLER_TYPE=1)
+        if Quit_command:
+            break
 
     cv2.destroyAllWindows()  # 释放并销毁窗口
