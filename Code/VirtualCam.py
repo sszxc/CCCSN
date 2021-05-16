@@ -10,7 +10,8 @@ import math
 from XboxController.Xbox import *
 import copy
 import time
-
+from PSO import *
+from Camera import save_image
 
 class Cam:
     def __init__(self):
@@ -138,13 +139,13 @@ class Cam:
             cv2.circle(topviewimg, tuple(corner_projected.astype(
                 np.int).T.tolist()[0:2]), 15, color, -1)
         cv2.line(
-            topviewimg, corners_projected[0], corners_projected[1], color)
+            topviewimg, corners_projected[0], corners_projected[1], color,2)
         cv2.line(
-            topviewimg, corners_projected[1], corners_projected[3], color)
+            topviewimg, corners_projected[1], corners_projected[3], color,2)
         cv2.line(
-            topviewimg, corners_projected[2], corners_projected[3], color)
+            topviewimg, corners_projected[2], corners_projected[3], color,2)
         cv2.line(
-            topviewimg, corners_projected[2], corners_projected[0], color)
+            topviewimg, corners_projected[2], corners_projected[0], color,2)
         # 标记一下相机视角中心
         cv2.circle(topviewimg, self.FocusCenter,
                     10, (0, 255, 255), -1)
@@ -217,6 +218,7 @@ def SensingQuality(heatmap, cameras):
     height = heatmap.shape[0]
     weight = heatmap.shape[1]
     img = np.zeros((height, weight, 3), np.uint8)
+    img.fill(255)
 
     # 叠加一下有效范围
     imgframe = np.zeros((height, weight, 3), np.uint8)
@@ -224,16 +226,15 @@ def SensingQuality(heatmap, cameras):
         imgframe = cv2.add(imgframe, camera.ValidView())
 
     # range加步长 提高运算速度
-    gap_step = 10
+    gap_step = 25 #10
     for h in range(0, height, gap_step):
         for w in range(0, weight, gap_step):
-            heat = 255 - heatmap[h, w, 0]  # 灰度
+            heat = 255 - heatmap[h, w, 0]  # 只看B通道 当作灰度处理
             Q_perspective = 0  # 视角质量=到中心的距离(之后可以用remap衡量)
             Q_resolution = 0  # 分辨率质量=每个像素法向距离 高斯函数？
             Q_pr = 0
             for camera in cameras:
-                # 全 255 属于有效视野
-                if camera.ValidView(update=False)[h, w].sum() == 765:
+                if camera.ValidView(update=False)[h, w].sum() == 765:# 全 255 属于有效视野
                     dh = h-camera.FocusCenter[1]
                     dw = w-camera.FocusCenter[0]
 
@@ -245,23 +246,70 @@ def SensingQuality(heatmap, cameras):
                     Q_resolution = max((5000 - altitude)/5000, 0)  # 0-1 规格化
                     Q_resolution *= max((8000-camera.dz)/8000, 0)  # 高度对分辨率的影响
 
-                    Q_pr = max(Q_perspective*Q_resolution,
-                               Q_pr)  # 多个相机之间的最高覆盖质量
+                    Q_pr = max(Q_perspective*Q_resolution, Q_pr)  # 多个相机之间的最高覆盖质量
 
             if Q_pr != 0:
                 # 红色高质量 蓝色低质量
                 # img[h, w, 0] = 255-Q_pr*255
                 # img[h, w, 2] = Q_pr*255
-                cv2.circle(img, (w, h), 3, (255-Q_pr*255, 120, Q_pr*255), -1)
-
+                cv2.rectangle(img, (w,h),(w+gap_step,h+gap_step),(255-Q_pr*255, 120, Q_pr*255),-1)
+                # cv2.circle(img, (w, h), 3, (255-Q_pr*255, 120, Q_pr*255), -1)
+                
             score += heat * Q_pr
             score_count += 1
 
         # print (h)
     end_time = time.time()
-    print("score:", score)
-    print("time cost:", end_time-start_time)
+    # print("score:", score)
+    # print("time cost:", end_time-start_time)
     return score, img
+
+def refresh_cam(heatmapfile,cam_1_T_para,cam_2_T_para, autosolve = False):
+    '''
+    为了优化求解 简单打包一下 没法外部调用
+    '''
+    cam_1.init_T(*cam_1_T_para)
+    cam_2.init_T(*cam_2_T_para)
+    if not autosolve:
+        print("cam1T:", cam_1_T_para)
+        print("cam2T:", cam_2_T_para)
+
+    # 相机初始化
+    topview.init_view()
+    cam_1.init_view(800, 1280)
+    cam_2.init_view(800, 1280)
+
+    # 标记一下相机视角中心
+    cam_1.init_FocusCenter(topview.capture(cam_1.Focus))
+    cam_2.init_FocusCenter(topview.capture(cam_2.Focus))
+
+    # 利用前四个点生成变换矩阵
+    pixel_topview = [topview.capture(point) for point in points[0:4]]
+    cam_1.init_M2topview(points[0:4], pixel_topview)
+    cam_2.init_M2topview(points[0:4], pixel_topview)
+
+    # 导入底图 即 heatmap
+    img_fullview = cv2.imread(heatmapfile)
+    if not autosolve:
+        # 更新两个相机
+        topview.img = img_fullview
+        img_nodecam1 = cv2.warpPerspective(
+            img_fullview, cam_1.M, (1280, 800), borderValue=(255, 255, 255))
+
+    if not autosolve:
+        # 相机投影到俯视图
+        cam_1.cam_frame_project(topview.img,(0,255,0))
+        cam_2.cam_frame_project(topview.img,(0,0,255))
+
+    # 计算覆盖质量
+    score, score_img = SensingQuality(img_fullview, [cam_1, cam_2])
+
+    if not autosolve:
+        # 节点相机的画面 缩放一下 看起来方便点
+        cam_1.img = cv2.resize(
+            img_nodecam1, (int(0.5*img_nodecam1.shape[1]), int(0.5*img_nodecam1.shape[0])))
+    
+    return score, score_img
 
 def update_by_controller(T_para, T_para_defult, CONTROLLER_TYPE=1):
     '''
@@ -304,17 +352,17 @@ def update_by_controller(T_para, T_para_defult, CONTROLLER_TYPE=1):
         if k == ord('q') or k == ord('Q'):
             Quit_command = 1
         elif k == ord('A'):
-            T_para[1] += 1000
+            T_para[1] += 250
         elif k == ord('D'):
-            T_para[1] -= 1000
+            T_para[1] -= 250
         elif k == ord('W'):
-            T_para[2] += 1000
+            T_para[2] += 250
         elif k == ord('S'):
-            T_para[2] -= 1000
+            T_para[2] -= 250
         elif k == ord('Z'):
-            T_para[3] += 1000
+            T_para[3] += 250
         elif k == ord('X'):
-            T_para[3] -= 1000
+            T_para[3] -= 250
         elif k == ord('U'):
             T_para[0][0] += 10
         elif k == ord('J'):
@@ -331,6 +379,7 @@ def update_by_controller(T_para, T_para_defult, CONTROLLER_TYPE=1):
             T_para = T_para_defult
 
     return T_para, Quit_command
+
 
 if __name__ == "__main__":
     # 创建理想俯视图相机
@@ -371,55 +420,56 @@ if __name__ == "__main__":
     # points[6] = np.array([[1980], [900], [0]], dtype=float)
     # points[7] = np.array([[2400], [1800], [0]], dtype=float)
 
-    # 下次写成 for cam in cameras:
-    while 1:
-        print("cam1T:", cam_1_T_para)
-        cam_1.init_T(*cam_1_T_para)
-        print("cam2T:", cam_2_T_para)
-        cam_2.init_T(*cam_2_T_para)
-
-        # 相机初始化
-        topview.init_view()
-        cam_1.init_view(800, 1280)
-        cam_2.init_view(800, 1280)
-
-        # 标记一下相机视角中心
-        cam_1.init_FocusCenter(topview.capture(cam_1.Focus))
-        cam_2.init_FocusCenter(topview.capture(cam_2.Focus))
-
-
-        # 利用前四个点生成变换矩阵    
-        pixel_topview = [topview.capture(point) for point in points[0:4]]
-        cam_1.init_M2topview(points[0:4], pixel_topview)
-        cam_2.init_M2topview(points[0:4], pixel_topview)
-
-        # 导入底图 即 heatmap
-        img_fullview = cv2.imread('./img/heat2.jpg')
-        # 更新两个相机
-        topview.img = img_fullview
-        img_nodecam1 = cv2.warpPerspective(
-            img_fullview, cam_1.M, (1280, 800), borderValue=(255, 255, 255))
-
-        # 相机投影到俯视图
-        cam_1.cam_frame_project(topview.img,(0,255,0))
-        cam_2.cam_frame_project(topview.img,(0,0,255))
-
-        # 计算覆盖质量
-        score, score_img = SensingQuality(
-            img_fullview, [cam_1, cam_2])
-
-        # 节点相机的画面 缩放一下 看起来方便点
-        cam_1.img = cv2.resize(
-            img_nodecam1, (int(0.5*img_nodecam1.shape[1]), int(0.5*img_nodecam1.shape[0])))
+    while 0:
+        score, score_img = refresh_cam('./img/heat0.jpg', cam_1_T_para, cam_2_T_para, autosolve=False)
 
         cv2.imshow('topview', topview.img)
         cv2.imshow('camview_1', cam_1.img)
         cv2.imshow('score', score_img)
 
-        # 用手柄更新云台参数
+        # 用键盘/手柄更新云台参数
         cam_1_T_para , Quit_command = update_by_controller(
             cam_1_T_para, cam_1_T_para_defult, CONTROLLER_TYPE=1)
         if Quit_command:
             break
+
+    def score_function(cam_12_T_para):
+        # 把不需要优化的补上
+        score, _ = refresh_cam(
+            './img/heat0.jpg', [cam_12_T_para.tolist()[0:3], *cam_1_T_para_defult[1:4]], [cam_12_T_para.tolist()[3:6], *cam_2_T_para_defult[1:4]], autosolve=True)
+        return score
+
+    # PSO 自动求解
+    bundary_lower = [-60, -60, -90, -60, -60, -90]
+    bundary_upper = [60, 60, 90, 60, 60, 90]
+    pso = PSO(cam_1_T_para[0]+cam_2_T_para[0], bundary_upper,
+                bundary_lower, score_function)
+    # pso.evolve()
+    # 为了中间画图 在这边拆开了
+    history = []
+    plt.figure().canvas.set_window_title('Evolve')  # 窗口名
+    plt.ion()
+
+    for step in range(200):
+        pso.update()
+        print(str(step)+' best score:'+str(pso.g_bestf))
+        history.append(pso.g_bestf)
+        plt.clf()
+        plt.plot(range(step+1), history)
+        plt.rcParams['font.sans-serif'] = 'SimHei'  # 显示中文不乱码
+        plt.xlabel(u"迭代次数")  # X轴标签
+        plt.ylabel(u"适应度")  # Y轴标签
+        plt.title(u"迭代过程")  # 标题
+        _, score_img = refresh_cam(
+            './img/heat0.jpg', [pso.g_bestx.tolist()[0:3], *cam_1_T_para_defult[1:4]], [pso.g_bestx.tolist()[3:6], *cam_2_T_para_defult[1:4]], autosolve=False)
+        cv2.imshow('topview', topview.img)
+        cv2.imshow('camview_1', cam_1.img)
+        cv2.imshow('score', score_img)
+        save_image(topview.img, rename_by_time=False,
+                   path="/img/2cam_heat0/")
+        plt.pause(0.0001)
+        plt.ioff()
+
+    plt.show()
 
     cv2.destroyAllWindows()  # 释放并销毁窗口

@@ -179,11 +179,11 @@ def at_print(frame, tags):
 
     return frame
 
-def save_image(img, rename_by_time):
+def save_image(img, rename_by_time, path = "/img/"):
     '''
     True: 按照时间命名 False: 按照序号命名
     '''
-    filename = sys.path[0] + "/img/"
+    filename = sys.path[0] + path
     if rename_by_time:
         filename += time.strftime('%H%M%S')
     else:
@@ -194,8 +194,8 @@ def save_image(img, rename_by_time):
             index += 1
         filename += str(index)
     filename += ".jpg"
-    # cv2.imwrite("./img/" + filename, frame_undistort) # 非中文路径保存图片
-    cv2.imencode('.jpg', frame_undistort)[1].tofile(filename)  # 中文路径保存图片
+    # cv2.imwrite("./img/" + filename, img) # 非中文路径保存图片
+    cv2.imencode('.jpg', img)[1].tofile(filename)  # 中文路径保存图片
     print("save img successfuly!")
     print(filename)
 
@@ -233,10 +233,10 @@ if __name__ == "__main__":
         tags = at_detect(frame_undistort)
         time_detect = time.time() - time_start
 
-        # frame_out = at_print(frame_undistort,tags)
+        frame_out = at_print(frame_undistort,tags)
         time_project = time.time() - time_start
 
-        img_or_console = 0 # 显示图像or输出到命令行
+        img_or_console = 1 # 显示图像or输出到命令行
         if img_or_console:
             cv2.putText(frame_out, "FPS:" + str(cal_fps()),
                         (0, 30), cv2.FONT_HERSHEY_PLAIN, 2.8, (0, 255, 0), 2)
