@@ -421,7 +421,7 @@ if __name__ == "__main__":
     # points[7] = np.array([[2400], [1800], [0]], dtype=float)
 
     while 0:
-        score, score_img = refresh_cam('./img/heat0.jpg', cam_1_T_para, cam_2_T_para, autosolve=False)
+        score, score_img = refresh_cam('./img/heat1.jpg', cam_1_T_para, cam_2_T_para, autosolve=False)
 
         cv2.imshow('topview', topview.img)
         cv2.imshow('camview_1', cam_1.img)
@@ -436,7 +436,7 @@ if __name__ == "__main__":
     def score_function(cam_12_T_para):
         # 把不需要优化的补上
         score, _ = refresh_cam(
-            './img/heat0.jpg', [cam_12_T_para.tolist()[0:3], *cam_1_T_para_defult[1:4]], [cam_12_T_para.tolist()[3:6], *cam_2_T_para_defult[1:4]], autosolve=True)
+            './img/heat1.jpg', [cam_12_T_para.tolist()[0:3], *cam_1_T_para_defult[1:4]], [cam_12_T_para.tolist()[3:6], *cam_2_T_para_defult[1:4]], autosolve=True)
         return score
 
     # PSO 自动求解
@@ -461,12 +461,12 @@ if __name__ == "__main__":
         plt.ylabel(u"适应度")  # Y轴标签
         plt.title(u"迭代过程")  # 标题
         _, score_img = refresh_cam(
-            './img/heat0.jpg', [pso.g_bestx.tolist()[0:3], *cam_1_T_para_defult[1:4]], [pso.g_bestx.tolist()[3:6], *cam_2_T_para_defult[1:4]], autosolve=False)
+            './img/heat1.jpg', [pso.g_bestx.tolist()[0:3], *cam_1_T_para_defult[1:4]], [pso.g_bestx.tolist()[3:6], *cam_2_T_para_defult[1:4]], autosolve=False)
         cv2.imshow('topview', topview.img)
         cv2.imshow('camview_1', cam_1.img)
         cv2.imshow('score', score_img)
         save_image(topview.img, rename_by_time=False,
-                   path="/img/2cam_heat0/")
+                   path="/img/2cam_heat1/")
         plt.pause(0.0001)
         plt.ioff()
 
